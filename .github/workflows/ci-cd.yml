@@ -1,0 +1,68 @@
+name: Angular CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+# Grants the workflow permission to deploy to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # ==========================================
+  # CI JOB: Lint, Test, and Build
+  # ==========================================
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Unit Tests
+        run: npm run test:ci
+
+      - name: Build Angular Application
+        # Replace <your-repo-name> with your actual GitHub repository name for correct base href
+        run: npm run build -- --base-href /${{ github.event.repository.name }}/
+
+      - name: Upload build artifact
+        # Only upload on main branch pushes so we can deploy
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # In modern Angular, output is dist/<project-name>/browser
+          path: dist/angular-ci-cd-demo/browser
+
+  # ==========================================
+  # CD JOB: Deploy to GitHub Pages
+  # ==========================================
+  deploy:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
